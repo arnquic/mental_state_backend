@@ -22,6 +22,7 @@ def upgrade():
         sa.Column("id", sa.Integer, primary_key=True),
         sa.Column("content", sa.String, nullable=False),
         sa.Column("dateTime", sa.DateTime, nullable=False),
+        sa.Column("analysis", sa.Float, nullable=False),
         sa.Column("userId", sa.Integer)
     )
 
