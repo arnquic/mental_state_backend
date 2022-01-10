@@ -35,8 +35,8 @@ def create_user():
         hashed_pw = bcrypt.generate_password_hash(request.json["password"]).decode("utf-8")
         # Create the new user.
         new_user = models.User(
-            firstName = request.json["firstName"],
-            lastName = request.json["lastName"],
+            firstName = request.json["first_name"],
+            lastName = request.json["last_name"],
             email = request.json["email"],
             password = hashed_pw
         )
@@ -114,6 +114,91 @@ def verify_user():
         return {"message": "Something unknown went wrong."}, 400
 
 app.route("/user/verify", methods=["GET"])(verify_user)
+
+
+# -------------------------------------------------
+# Update an existing user's email and/or password information.
+def update_user():
+    try:
+        # Decrypt the incoming authorization header.
+        decrypted_id = jwt.decode(request.headers["Authorization"], os.environ.get("JWT_SECRET"), algorithms=["HS256"])["user_id"]
+        # Look for a user with the decrypted user id.
+        user = models.User.query.filter_by(id=decrypted_id).first()
+        # Handle whether a user was found.
+        if user:
+            print("Found user.")
+            # Check if the user's email address is being updated.
+            if request.json.get("email"):
+                print("Found email in json request.")
+                # Check if the user's current password matches what has been passed.
+                if bcrypt.check_password_hash(user.password, request.json["current_password"]):
+                    print("Password check passed for email password check.")
+                    # Update the user's email address.
+                    user.email = request.json["email"]
+                else:
+                    # Return a message if the password does not match.
+                    return{"message": "The current password is incorrect. Unable to update user information."}, 401
+            print(request.json.get("new_password"))
+            # Check if the user's password is being updated.
+            if request.json.get("new_password"):
+                print("new_password check came back as true.")
+                # Check if the user's current password matches what has been passed.
+                if bcrypt.check_password_hash(user.password, request.json["current_password"]):
+                    # Update the user's password.
+                    user.password = bcrypt.generate_password_hash(request.json["new_password"]).decode("utf-8")
+                else:
+                    # Return a message if the password does not match.
+                    return{"message": "The current password is incorrect. Unable to update user information."}, 401
+            # Update the user within the database.
+            models.db.session.add(user)
+            # Commit the database updates.
+            models.db.session.commit()
+            # Create an encrypted authorization token before returning it to the client.
+            encrypted_id = jwt.encode({"user_id": user.id}, os.environ.get("JWT_SECRET"), algorithm="HS256")
+            # Return the updated user data to the client.
+            return {
+                "user_info": user.to_json(),
+                "summit_auth": encrypted_id
+            }
+        else:
+            # Return a message if no user is found.
+            return {"message": "Invalid user. Unable to update user information."}, 404
+    except Exception as err:
+        print("err", err)
+        return {"message": "Something unknown went wrong."}, 400
+
+app.route("/user/update", methods=["PUT"])(update_user)
+
+
+# -------------------------------------------------
+# Delete user account
+def delete_user():
+    try:
+        # Decrypt the incoming authorization header.
+        decrypted_id = jwt.decode(request.headers["Authorization"], os.environ.get("JWT_SECRET"), algorithms=["HS256"])["user_id"]
+        # Look for a user with the decrypted user id.
+        user = models.User.query.filter_by(id=decrypted_id).first()
+        # Handle whether a user was found.
+        if user:
+            # Check if the user's current password matches what has been passed.
+            if bcrypt.check_password_hash(user.password, request.json["password"]):
+                # Delete the user.
+                models.db.session.delete(user)
+                # Commit the database updates.
+                models.db.session.commit()
+                # Return a successful deletion message.
+                return {"message": "User has been successfully deleted."}
+            else:
+                # Return a message if the password does not match.
+                return{"message": "The entered password is incorrect. Unable to delete user."}, 401
+        else:
+            # Return a message if no user is found.
+            return {"message": "Invalid user. Unable to update user information."}, 404
+    except Exception as err:
+        print(err)
+        return {"message": "Something unknown went wrong."}, 400
+
+app.route("/user/delete", methods=["DELETE"])(delete_user)
 
 
 # -------------------------------------------------
