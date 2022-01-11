@@ -30,6 +30,7 @@ class Log(db.Model):
 
     def to_json(self):
         return {
+            "id": self.id,
             "content": self.content,
             "dateTime": self.dateTime,
             "analysis": self.analysis
