@@ -31,6 +31,11 @@ models.db.init_app(app)
 # Create a new User.
 def create_user():
     try:
+        # Search for a pre-existing user with the given email.
+        existing_user = models.User.query.filter_by(email=request.json["email"]).first()
+        # Handle the presence of an existing user.
+        if existing_user:
+            return {"message": "An account already exists with that email."}
         # Hash the password for the new user.
         hashed_pw = bcrypt.generate_password_hash(request.json["password"]).decode("utf-8")
         # Create the new user.
@@ -52,6 +57,9 @@ def create_user():
             "user_info": new_user.to_json(),
             "summit_auth": encrypted_id
         }
+    except sqlalchemy.exc.IntegrityError as err:
+        print(err)
+        return {"message": "All values must be provided."}, 400
     except Exception as err:
         print (err)
         return {"message": "Something unknown went wrong."}, 400
@@ -126,19 +134,22 @@ def update_user():
         user = models.User.query.filter_by(id=decrypted_id).first()
         # Handle whether a user was found.
         if user:
-            print("Found user.")
             # Check if the user's email address is being updated.
             if request.json.get("email"):
-                print("Found email in json request.")
                 # Check if the user's current password matches what has been passed.
                 if bcrypt.check_password_hash(user.password, request.json["current_password"]):
                     print("Password check passed for email password check.")
-                    # Update the user's email address.
-                    user.email = request.json["email"]
+                    # Check if another user already has that email address.
+                    existing_user = models.User.query.filter_by(email=request.json["email"]).first()
+                    # Handle existing user.
+                    if existing_user:
+                        return{"message": "An account already exists with that email."}
+                    else:
+                        # Update the user's email address.
+                        user.email = request.json["email"]
                 else:
                     # Return a message if the password does not match.
                     return{"message": "The current password is incorrect. Unable to update user information."}, 401
-            print(request.json.get("new_password"))
             # Check if the user's password is being updated.
             if request.json.get("new_password"):
                 print("new_password check came back as true.")
@@ -187,7 +198,7 @@ def delete_user():
                 # Commit the database updates.
                 models.db.session.commit()
                 # Return a successful deletion message.
-                return {"message": "User has been successfully deleted."}
+                return {"code": 0}
             else:
                 # Return a message if the password does not match.
                 return{"message": "The entered password is incorrect. Unable to delete user."}, 401
