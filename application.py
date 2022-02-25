@@ -1,6 +1,9 @@
 # -------------------------------------------------
 # Imports and initilizations
 # -------------------------------------------------
+import models
+from flask_bcrypt import Bcrypt
+from flask_cors import CORS
 from logging import log
 import os
 import re
@@ -12,15 +15,13 @@ from datetime import datetime, timezone
 from flask import Flask, request
 app = Flask(__name__)
 
-from flask_cors import CORS
 CORS(app)
 
-from flask_bcrypt import Bcrypt
 bcrypt = Bcrypt(app)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-import models
 models.db.init_app(app)
 
 # -------------------------------------------------
@@ -28,22 +29,41 @@ models.db.init_app(app)
 # -------------------------------------------------
 
 # -----------------------------------------------
+# Server Health Status
+
+
+def health_status():
+    try:
+        # Return a status of 200 if this route is reached.
+        return {"message": "Server is healthy."}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "The server is facing and exception."}, 400
+
+
+app.route("/", methods=["GET"])(health_status)
+
+# -----------------------------------------------
 # Create a new User.
+
+
 def create_user():
     try:
         # Search for a pre-existing user with the given email.
-        existing_user = models.User.query.filter_by(email=request.json["email"]).first()
+        existing_user = models.User.query.filter_by(
+            email=request.json["email"]).first()
         # Handle the presence of an existing user.
         if existing_user:
             return {"message": "An account already exists with that email."}
         # Hash the password for the new user.
-        hashed_pw = bcrypt.generate_password_hash(request.json["password"]).decode("utf-8")
+        hashed_pw = bcrypt.generate_password_hash(
+            request.json["password"]).decode("utf-8")
         # Create the new user.
         new_user = models.User(
-            firstName = request.json["first_name"],
-            lastName = request.json["last_name"],
-            email = request.json["email"],
-            password = hashed_pw
+            firstName=request.json["first_name"],
+            lastName=request.json["last_name"],
+            email=request.json["email"],
+            password=hashed_pw
         )
         print(new_user.to_json())
         # Add the new user to the database.
@@ -51,7 +71,8 @@ def create_user():
         # Commit the database updates.
         models.db.session.commit()
         # Create an encrypted authorization token before returning it to the client.
-        encrypted_id = jwt.encode({"user_id": new_user.id}, os.environ.get("JWT_SECRET"), algorithm="HS256")
+        encrypted_id = jwt.encode({"user_id": new_user.id}, os.environ.get(
+            "JWT_SECRET"), algorithm="HS256")
         # Return the user data to the client.
         return {
             "user_info": new_user.to_json(),
@@ -61,8 +82,9 @@ def create_user():
         print(err)
         return {"message": "All values must be provided."}, 400
     except Exception as err:
-        print (err)
+        print(err)
         return {"message": "Something unknown went wrong."}, 400
+
 
 app.route("/user", methods=["POST"])(create_user)
 
@@ -78,7 +100,8 @@ def login_user():
             # Compare the found user's password to the given password.
             if (bcrypt.check_password_hash(user.password, request.json["password"])):
                 # Create an encrypted authorization token before returning it to the client.
-                encrypted_id = jwt.encode({"user_id": user.id}, os.environ.get("JWT_SECRET"), algorithm="HS256")
+                encrypted_id = jwt.encode({"user_id": user.id}, os.environ.get(
+                    "JWT_SECRET"), algorithm="HS256")
                 # Return the user data to the client.
                 return {
                     "user_info": user.to_json(),
@@ -94,6 +117,7 @@ def login_user():
         print(err)
         return {"message": "Something unknown went wrong."}, 400
 
+
 app.route("/user/login", methods=["POST"])(login_user)
 
 
@@ -102,13 +126,15 @@ app.route("/user/login", methods=["POST"])(login_user)
 def verify_user():
     try:
         # Decrypt the incoming authorization header.
-        decrypted_id = jwt.decode(request.headers["Authorization"], os.environ.get("JWT_SECRET"), algorithms=["HS256"])["user_id"]
+        decrypted_id = jwt.decode(request.headers["Authorization"], os.environ.get(
+            "JWT_SECRET"), algorithms=["HS256"])["user_id"]
         # Look for a user with the decrypted user id.
         user = models.User.query.filter_by(id=decrypted_id).first()
         # Handle whether a user was found.
         if user:
             # Create an encrypted authorization token before returning it to the client.
-            encrypted_id = jwt.encode({"user_id": user.id}, os.environ.get("JWT_SECRET"), algorithm="HS256")
+            encrypted_id = jwt.encode({"user_id": user.id}, os.environ.get(
+                "JWT_SECRET"), algorithm="HS256")
             # Return the user data to the client.
             return {
                 "user_info": user.to_json(),
@@ -121,6 +147,7 @@ def verify_user():
         print(err)
         return {"message": "Something unknown went wrong."}, 400
 
+
 app.route("/user/verify", methods=["GET"])(verify_user)
 
 
@@ -129,7 +156,8 @@ app.route("/user/verify", methods=["GET"])(verify_user)
 def update_user():
     try:
         # Decrypt the incoming authorization header.
-        decrypted_id = jwt.decode(request.headers["Authorization"], os.environ.get("JWT_SECRET"), algorithms=["HS256"])["user_id"]
+        decrypted_id = jwt.decode(request.headers["Authorization"], os.environ.get(
+            "JWT_SECRET"), algorithms=["HS256"])["user_id"]
         # Look for a user with the decrypted user id.
         user = models.User.query.filter_by(id=decrypted_id).first()
         # Handle whether a user was found.
@@ -140,7 +168,8 @@ def update_user():
                 if bcrypt.check_password_hash(user.password, request.json["current_password"]):
                     print("Password check passed for email password check.")
                     # Check if another user already has that email address.
-                    existing_user = models.User.query.filter_by(email=request.json["email"]).first()
+                    existing_user = models.User.query.filter_by(
+                        email=request.json["email"]).first()
                     # Handle existing user.
                     if existing_user:
                         return{"message": "An account already exists with that email."}
@@ -156,7 +185,8 @@ def update_user():
                 # Check if the user's current password matches what has been passed.
                 if bcrypt.check_password_hash(user.password, request.json["current_password"]):
                     # Update the user's password.
-                    user.password = bcrypt.generate_password_hash(request.json["new_password"]).decode("utf-8")
+                    user.password = bcrypt.generate_password_hash(
+                        request.json["new_password"]).decode("utf-8")
                 else:
                     # Return a message if the password does not match.
                     return{"message": "The current password is incorrect. Unable to update user information."}, 401
@@ -165,7 +195,8 @@ def update_user():
             # Commit the database updates.
             models.db.session.commit()
             # Create an encrypted authorization token before returning it to the client.
-            encrypted_id = jwt.encode({"user_id": user.id}, os.environ.get("JWT_SECRET"), algorithm="HS256")
+            encrypted_id = jwt.encode({"user_id": user.id}, os.environ.get(
+                "JWT_SECRET"), algorithm="HS256")
             # Return the updated user data to the client.
             return {
                 "user_info": user.to_json(),
@@ -178,6 +209,7 @@ def update_user():
         print("err", err)
         return {"message": "Something unknown went wrong."}, 400
 
+
 app.route("/user/update", methods=["PUT"])(update_user)
 
 
@@ -186,7 +218,8 @@ app.route("/user/update", methods=["PUT"])(update_user)
 def delete_user():
     try:
         # Decrypt the incoming authorization header.
-        decrypted_id = jwt.decode(request.headers["Authorization"], os.environ.get("JWT_SECRET"), algorithms=["HS256"])["user_id"]
+        decrypted_id = jwt.decode(request.headers["Authorization"], os.environ.get(
+            "JWT_SECRET"), algorithms=["HS256"])["user_id"]
         # Look for a user with the decrypted user id.
         user = models.User.query.filter_by(id=decrypted_id).first()
         # Handle whether a user was found.
@@ -209,6 +242,7 @@ def delete_user():
         print(err)
         return {"message": "Something unknown went wrong."}, 400
 
+
 app.route("/user/delete", methods=["DELETE"])(delete_user)
 
 
@@ -219,16 +253,17 @@ def logs_func():
     if request.method == "POST":
         try:
             # Decrypt the incoming authorization header.
-            decrypted_id = jwt.decode(request.headers["Authorization"], os.environ.get("JWT_SECRET"), algorithms=["HS256"])["user_id"]
+            decrypted_id = jwt.decode(request.headers["Authorization"], os.environ.get(
+                "JWT_SECRET"), algorithms=["HS256"])["user_id"]
             # Look for a user with the decrypted user id.
             user = models.User.query.filter_by(id=decrypted_id).first()
             # Handle whether a user was found.
             if user:
                 # Create a new Log.
                 new_log = models.Log(
-                    content = request.json["content"],
-                    dateTime = datetime.now(timezone.utc),
-                    analysis = request.json["analysis"]
+                    content=request.json["content"],
+                    dateTime=datetime.now(timezone.utc),
+                    analysis=request.json["analysis"]
                 )
                 # Associate the new log to the user.
                 user.logs.append(new_log)
@@ -238,18 +273,19 @@ def logs_func():
                 models.db.session.add(user)
                 # Commit the database updates.
                 models.db.session.commit()
-                return { "new_log": new_log.to_json() }
+                return {"new_log": new_log.to_json()}
             else:
                 # Return a message if no user is found.
                 return {"message": "Invalid user. Unable to create new log."}, 404
         except Exception as err:
-            print(err)  
+            print(err)
             return {"message": "Something unknown went wrong."}, 400
     # GET: Retrieve all of the logged in user's Logs.
     elif request.method == "GET":
         try:
             # Decrypt the incoming authorization header.
-            decrypted_id = jwt.decode(request.headers["Authorization"], os.environ.get("JWT_SECRET"), algorithms=["HS256"])["user_id"]
+            decrypted_id = jwt.decode(request.headers["Authorization"], os.environ.get(
+                "JWT_SECRET"), algorithms=["HS256"])["user_id"]
             # Look for a user with the decrypted user id.
             user = models.User.query.filter_by(id=decrypted_id).first()
             # Handle whether a user was found.
@@ -260,11 +296,11 @@ def logs_func():
                 # Return a message if no user is found.
                 return {"message": "Invalid user. Unable to retrieve logs."}, 404
         except Exception as err:
-            print(err)  
+            print(err)
             return {"message": "Something unknown went wrong."}, 400
 
-app.route("/logs", methods=["POST", "GET"])(logs_func)
 
+app.route("/logs", methods=["POST", "GET"])(logs_func)
 
 
 # Set the Flask app to run.
